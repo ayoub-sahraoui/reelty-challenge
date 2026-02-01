@@ -1,15 +1,21 @@
+import { ClipType } from "@/lib/video-editor/types";
 import React from "react";
 import { useDrop } from "react-dnd";
 
 interface DroppableProps {
   children: React.ReactNode;
-  onDrop: (id: string) => void;
+  onDrop: (item: DropItem) => void;
+}
+
+export interface DropItem {
+  type: ClipType;
+  data: any;
 }
 
 export default function Droppable({ children, onDrop }: DroppableProps) {
   const [{ isOver }, drop] = useDrop(() => ({
     accept: "media",
-    drop: (item: { id: string }) => onDrop(item.id),
+    drop: (item: DropItem) => onDrop(item),
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
     }),

@@ -48,4 +48,30 @@ export class VideoClip implements BaseClip {
   getType() {
     return ClipType.Video;
   }
+
+  adjust(start: number, end: number) {
+    this.start = start;
+    this.end = end;
+    this.durationInFrames = end - start;
+  }
+
+  moveTo(startFrame: number) {
+    const duration = this.durationInFrames;
+    this.start = startFrame;
+    this.end = startFrame + duration;
+  }
+
+  trimStart(newStartFrame: number) {
+    if (newStartFrame < this.end) {
+      this.start = newStartFrame;
+      this.durationInFrames = this.end - this.start;
+    }
+  }
+
+  trimEnd(newEndFrame: number) {
+    if (newEndFrame > this.start) {
+      this.end = newEndFrame;
+      this.durationInFrames = this.end - this.start;
+    }
+  }
 }

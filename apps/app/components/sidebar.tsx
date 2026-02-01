@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   AudioLines,
   Captions,
+  CaseSensitive,
   CirclePlus,
   Clapperboard,
   Image,
@@ -10,37 +11,56 @@ import {
   Video,
 } from "lucide-react";
 import React from "react";
-import { Button } from "./ui/button";
 import { Separator } from "@/components/ui/separator";
-
-const items = [
-  {
-    icon: <Clapperboard />,
-    label: "Upload",
-  },
-  {
-    icon: <Video />,
-    label: "Video",
-  },
-  {
-    icon: <AudioLines />,
-    label: "Audio",
-  },
-  {
-    icon: <Image />,
-    label: "Image",
-  },
-  {
-    icon: <Text />,
-    label: "Text",
-  },
-  {
-    icon: <Captions />,
-    label: "Subtitles",
-  },
-];
+import { useNavigate } from "react-router-dom";
 
 export default function Sidebar() {
+  const navigate = useNavigate();
+
+  const items = [
+    {
+      icon: <Clapperboard />,
+      label: "Library",
+      onClick: () => {
+        navigate("/media-library");
+      },
+    },
+    {
+      icon: <Video />,
+      label: "Video",
+      onClick: () => {
+        navigate("/my-videos");
+      },
+    },
+    {
+      icon: <AudioLines />,
+      label: "Audio",
+      onClick: () => {
+        navigate("/my-audios");
+      },
+    },
+    {
+      icon: <Image />,
+      label: "Image",
+      onClick: () => {
+        navigate("/my-images");
+      },
+    },
+    {
+      icon: <CaseSensitive />,
+      label: "Text",
+      onClick: () => {
+        navigate("/text-library");
+      },
+    },
+    {
+      icon: <Captions />,
+      label: "Subtitles",
+      onClick: () => {
+        navigate("/subtitle-library");
+      },
+    },
+  ];
   return (
     <Card className="h-full">
       <CardContent className="flex h-full flex-1 flex-col gap-2 p-2">
@@ -60,6 +80,7 @@ export default function Sidebar() {
             <div
               key={item.label}
               className="flex cursor-pointer flex-col items-center gap-1 rounded-lg p-2 hover:ring-2"
+              onClick={item.onClick}
             >
               {item.icon}
               <span className="text-xs">{item.label}</span>

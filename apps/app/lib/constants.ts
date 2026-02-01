@@ -1,1 +1,1 @@
-export const PIXELS_PER_SECOND = 100;
+export const PIXELS_PER_FRAME = 3;

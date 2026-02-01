@@ -3,8 +3,8 @@ import { TRPCProvider } from "@/api/client";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Video Text Overlay Editor Challenge",
-  description: "A challenge for building interactive video editing features",
+  title: "Squircle Studio",
+  description: "Professional video editing studio",
 };
 
 export default function RootLayout({

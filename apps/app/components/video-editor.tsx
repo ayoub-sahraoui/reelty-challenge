@@ -11,6 +11,9 @@ import { Button } from "./ui/button";
 import Magnifier from "./magnifier";
 import { Plus } from "lucide-react";
 import TextDock from "./text-dock";
+import { useEditorStore } from "@/lib/video-editor/hooks/use-editor-store";
+import { trpc } from "@/api/client";
+import VideoPreview from "./video-preview";
 
 export default function tchVideoEditor() {
   const ratio: "portrait" | "landscape" = "portrait";
@@ -90,11 +93,17 @@ export default function tchVideoEditor() {
             </div>
             <div className="size-1.5 rounded-full bg-[#D9D9D9]" />
             <div className="flex items-center space-x-1">
-              <p className="line-clamp-1">Video Editor</p>
+              <p className="line-clamp-1">Squircle Studio</p>
             </div>
           </div>
           <div className="hidden md:flex">
-            <Magnifier onZoomChange={handleZoomChange} initialZoom={zoomLevel} ratio={ratio} isLoading={false} externalZoom={zoomLevel} />
+            <Magnifier
+              onZoomChange={handleZoomChange}
+              initialZoom={zoomLevel}
+              ratio={ratio}
+              isLoading={false}
+              externalZoom={zoomLevel}
+            />
           </div>
         </div>
       </div>
@@ -149,7 +158,12 @@ export default function tchVideoEditor() {
             ))}
             {removedClips.length > 0 && (
               <div className="mx-4">
-                <div className={twMerge("flex size-11 items-center justify-center rounded-lg border", "border-[#EDEDED] bg-[#FBFBFB] shadow-md")}>
+                <div
+                  className={twMerge(
+                    "flex size-11 items-center justify-center rounded-lg border",
+                    "border-[#EDEDED] bg-[#FBFBFB] shadow-md"
+                  )}
+                >
                   <Plus size={24} className="text-[#A3A3A3] duration-300" />
                 </div>
               </div>
@@ -159,45 +173,88 @@ export default function tchVideoEditor() {
       </div>
 
       <div className="shrink-0 p-6 md:px-8 md:py-4">
-        <RenderButton clips={activeClips} ratio={ratio} />
+        <div className="flex items-center justify-end gap-2">
+          <VideoPreview />
+          <RenderButton />
+        </div>
       </div>
     </div>
   );
 }
 
-const MIN_RENDER_DELAY_MS = 2000;
-const MAX_RENDER_DELAY_MS = 8000;
-
-function RenderButton({
-  clips,
-  ratio,
-}: {
-  clips: typeof SAMPLE_VIDEOS;
-  ratio: "portrait" | "landscape";
-}) {
-  const [isRendering, setIsRendering] = useState(false);
+function RenderButton() {
+  const store = useEditorStore();
+  const renderMutation = trpc.render.renderVideo.useMutation();
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const handleRender = async () => {
-    setIsRendering(true);
+    if (!store.video) {
+      console.error("No video to render");
+      return;
+    }
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * (MAX_RENDER_DELAY_MS - MIN_RENDER_DELAY_MS + 1)) + MIN_RENDER_DELAY_MS));
-    } finally {
-      setIsRendering(false);
+      console.log("🎬 Starting render...");
+      const renderProps = store.video.toRenderProps();
+
+      const result = await renderMutation.mutateAsync({ props: renderProps });
+
+      console.log("✅ Render complete!", result);
+
+      // Construct download URL
+      const RENDER_SERVER_URL =
+        process.env.NEXT_PUBLIC_RENDER_SERVER_URL || "http://localhost:3001";
+      const url = `${RENDER_SERVER_URL}/renders/${result.fileName}`;
+      setDownloadUrl(url);
+    } catch (error) {
+      console.error("❌ Render failed:", error);
     }
   };
 
+  const isRendering = renderMutation.isPending;
+  const hasError = renderMutation.isError;
+  const isSuccess = renderMutation.isSuccess;
+
   return (
-    <div className="flex items-center justify-end">
-      <Button onClick={handleRender} disabled={isRendering || clips.length === 0} className="min-w-[120px]">
-        {isRendering ? (
-          <span className="flex items-center gap-2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            Rendering...
-          </span>
-        ) : (
-          "Render Video"
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2">
+        {downloadUrl && isSuccess && (
+          <a
+            href={downloadUrl}
+            download
+            className="text-primary text-sm hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Download Video
+          </a>
         )}
-      </Button>
+        <Button
+          onClick={handleRender}
+          disabled={isRendering || !store.video}
+          className="min-w-[120px]"
+          variant={hasError ? "destructive" : "default"}
+        >
+          {isRendering ? (
+            <span className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Rendering...
+            </span>
+          ) : hasError ? (
+            "Render Failed"
+          ) : isSuccess ? (
+            "Render Again"
+          ) : (
+            "Render Video"
+          )}
+        </Button>
+      </div>
+      {hasError && (
+        <p className="text-destructive text-xs">
+          {renderMutation.error?.message || "Render failed. Please try again."}
+        </p>
+      )}
+      {isSuccess && <p className="text-xs text-green-600">✅ Video rendered successfully!</p>}
     </div>
   );
 }

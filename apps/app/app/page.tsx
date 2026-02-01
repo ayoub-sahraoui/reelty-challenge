@@ -11,6 +11,11 @@ import { observer } from "mobx-react";
 import CreateVideoDialog from "@/components/create-video-dialog";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import MyVideos from "@/components/my-videos";
+import MyImages from "@/components/my-images";
+import MyAudios from "@/components/my-audios";
+import TextLibrary from "@/components/text-library";
 
 const VideoEditor = observer(() => {
   const editorStore = useEditorStore();
@@ -39,7 +44,13 @@ const VideoEditor = observer(() => {
       <div className="flex flex-1 overflow-hidden">
         {/* Media Library Panel */}
         <div className="bg-card w-80 p-1">
-          <MediaLibrary />
+          <Routes>
+            <Route path="/media-library" element={<MediaLibrary />} />
+            <Route path="/my-videos" element={<MyVideos />} />
+            <Route path="/my-images" element={<MyImages />} />
+            <Route path="/my-audios" element={<MyAudios />} />
+            <Route path="/text-library" element={<TextLibrary />} />
+          </Routes>
         </div>
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Upper Workspace */}
@@ -69,14 +80,16 @@ export default function Home() {
   return (
     <DndProvider backend={HTML5Backend}>
       <VideoEditorProvider>
-        <div className="bg-background text-foreground flex h-screen w-full overflow-hidden p-1">
-          {/* Left Sidebar */}
-          <div className="bg-card p-1">
-            <Sidebar />
+        <MemoryRouter initialEntries={["/media-library"]} initialIndex={0}>
+          <div className="bg-background text-foreground flex h-screen w-full overflow-hidden p-1">
+            {/* Left Sidebar */}
+            <div className="bg-card p-1">
+              <Sidebar />
+            </div>
+            {/* Video Editor */}
+            <VideoEditor />
           </div>
-          {/* Video Editor */}
-          <VideoEditor />
-        </div>
+        </MemoryRouter>
       </VideoEditorProvider>
     </DndProvider>
   );

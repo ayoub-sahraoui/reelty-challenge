@@ -1,15 +1,17 @@
+import { ClipType } from "@/lib/video-editor/types";
 import React from "react";
 import { useDrag } from "react-dnd";
 
 interface DraggableProps {
   children: React.ReactNode;
-  item: any;
+  type: ClipType;
+  data: any;
 }
 
-export default function Draggable({ children, item }: DraggableProps) {
+export default function Draggable({ children, type, data }: DraggableProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "media",
-    item,
+    item: { type, data },
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { PIXELS_PER_SECOND } from "../lib/constants";
+import { PIXELS_PER_FRAME } from "../lib/constants";
 import { useEditorStore } from "../lib/video-editor/hooks/use-editor-store";
 
 interface TimelineRulerProps {
@@ -10,59 +10,153 @@ interface TimelineRulerProps {
   className?: string;
 }
 
-const TimelineRuler = observer(({ children, className }: TimelineRulerProps) => {
-  const store = useEditorStore();
-  const { currentTimeInSeconds, durationInSeconds } = store;
+// Format time as MM:SS from frames
+const formatTime = (frame: number, fps: number): string => {
+  const totalSeconds = frame / fps;
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+};
 
-  // Use constant for now, but keeping it in state allows for future zooming
-  const [pixelsPerSecond] = useState(PIXELS_PER_SECOND);
+const RulerTick = ({
+  frame,
+  fps,
+  pixelsPerFrame,
+}: {
+  frame: number;
+  fps: number;
+  pixelsPerFrame: number;
+}) => {
+  // Major tick every second (fps frames)
+  const isMajorTick = frame % fps === 0;
+  const left = frame * pixelsPerFrame;
+
+  return (
+    <div
+      className="absolute bottom-0 flex flex-col items-center"
+      style={{ left: `${left}px`, transform: "translateX(-50%)" }}
+    >
+      {isMajorTick ? (
+        <>
+          <span className="mb-1 font-mono text-[10px] text-zinc-500">{formatTime(frame, fps)}</span>
+          <div className="h-3 w-px bg-zinc-300" />
+        </>
+      ) : (
+        <div className="h-1.5 w-px bg-zinc-200" />
+      )}
+    </div>
+  );
+};
+
+// Sub-tick component (half-second marks in frames)
+const SubTick = ({ frame, pixelsPerFrame }: { frame: number; pixelsPerFrame: number }) => (
+  <div
+    className="absolute bottom-0 h-1 w-px bg-zinc-100"
+    style={{ left: `${frame * pixelsPerFrame}px`, transform: "translateX(-50%)" }}
+  />
+);
+
+// Playhead component - now positioned by frame
+const Playhead = ({
+  currentFrame,
+  pixelsPerFrame,
+  onMouseDown,
+}: {
+  currentFrame: number;
+  pixelsPerFrame: number;
+  onMouseDown: (e: React.MouseEvent) => void;
+}) => (
+  <div
+    className="pointer-events-none absolute top-0 bottom-0 z-50 w-px bg-red-500"
+    style={{ left: `${currentFrame * pixelsPerFrame}px` }}
+  >
+    <div
+      className="pointer-events-auto absolute -top-px left-1/2 h-4 w-3 -translate-x-1/2 cursor-ew-resize bg-red-500"
+      style={{ clipPath: "polygon(0% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 75%)" }}
+      onMouseDown={onMouseDown}
+    />
+  </div>
+);
+
+const TimelineRuler = observer(({ children, className = "" }: TimelineRulerProps) => {
+  const store = useEditorStore();
+  const { currentFrame, video } = store;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Format time as MM:SS
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  const pixelsPerFrame = PIXELS_PER_FRAME;
+  const fps = video?.fps || 30;
+  const durationInFrames = video?.durationInFrames || 300;
 
-  const updateTimeFromMouse = useCallback(
-    (e: MouseEvent | React.MouseEvent) => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const scrollLeft = containerRef.current.parentElement?.scrollLeft || 0;
-        const x = e.clientX - rect.left + scrollLeft;
-        const newTime = Math.max(0, Math.min(durationInSeconds, x / pixelsPerSecond));
-        store.setCurrentTime(newTime);
-      }
+  const getFrameFromMouseEvent = useCallback(
+    (e: MouseEvent | React.MouseEvent): number => {
+      if (!containerRef.current) return 0;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const scrollLeft = containerRef.current.parentElement?.scrollLeft || 0;
+      const x = e.clientX - rect.left + scrollLeft;
+
+      const frame = Math.round(x / pixelsPerFrame);
+      return Math.max(0, Math.min(durationInFrames, frame));
     },
-    [durationInSeconds, pixelsPerSecond, store]
+    [durationInFrames, pixelsPerFrame]
   );
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    updateTimeFromMouse(e);
-  };
+  // Update playhead position
+  const updatePlayhead = useCallback(
+    (e: MouseEvent | React.MouseEvent) => {
+      const newFrame = getFrameFromMouseEvent(e);
+      store.setCurrentFrame(newFrame);
+    },
+    [getFrameFromMouseEvent, store]
+  );
 
+  // Handle mouse down on ruler or playhead
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      setIsDragging(true);
+      updatePlayhead(e);
+    },
+    [updatePlayhead]
+  );
+
+  // Handle dragging
   useEffect(() => {
     if (!isDragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => updateTimeFromMouse(e);
+    const handleMouseMove = (e: MouseEvent) => updatePlayhead(e);
     const handleMouseUp = () => setIsDragging(false);
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, updateTimeFromMouse]);
+  }, [isDragging, updatePlayhead]);
 
-  // Generate ticks for every second
-  // Ensure we have at least 1 tick and cover the full duration
-  const safeDuration = Math.max(1, Math.ceil(durationInSeconds));
-  const ticks = Array.from({ length: safeDuration + 1 }, (_, i) => i);
+  // Generate tick marks based on frames
+  // Major ticks every second (fps frames), minor ticks every 5 frames
+  const majorTickFrames: number[] = [];
+  const minorTickFrames: number[] = [];
+  const subTickFrames: number[] = [];
+
+  for (let frame = 0; frame <= durationInFrames; frame++) {
+    if (frame % fps === 0) {
+      // Every second
+      majorTickFrames.push(frame);
+    } else if (frame % (fps / 2) === 0) {
+      // Every half second
+      subTickFrames.push(frame);
+    } else if (frame % 5 === 0) {
+      // Every 5 frames
+      minorTickFrames.push(frame);
+    }
+  }
+
+  const timelineWidth = durationInFrames * pixelsPerFrame;
 
   return (
     <div
@@ -71,62 +165,48 @@ const TimelineRuler = observer(({ children, className }: TimelineRulerProps) => 
       <div
         ref={containerRef}
         className="relative flex h-full min-w-full flex-col bg-white"
-        style={{ width: `${durationInSeconds * pixelsPerSecond}px` }}
+        style={{ width: `${timelineWidth}px` }}
       >
         {/* Ruler Strip */}
         <div
           className="relative h-12 cursor-pointer border-b border-zinc-200 bg-white"
           onMouseDown={handleMouseDown}
         >
-          {ticks.map((t) => (
-            <div
-              key={t}
-              className="absolute bottom-0 flex flex-col items-center"
-              style={{ left: `${t * pixelsPerSecond}px`, transform: "translateX(-50%)" }}
-            >
-              {t % 5 === 0 ? (
-                <>
-                  <span className="mb-1 font-mono text-[10px] text-zinc-500">{formatTime(t)}</span>
-                  <div className="h-3 w-px bg-zinc-300" />
-                </>
-              ) : (
-                <div className="h-1.5 w-px bg-zinc-200" />
-              )}
-            </div>
+          {/* Major ticks (every second) */}
+          {majorTickFrames.map((frame) => (
+            <RulerTick key={frame} frame={frame} fps={fps} pixelsPerFrame={pixelsPerFrame} />
           ))}
 
-          {/* Sub-ticks */}
-          {Array.from({ length: safeDuration * 2 }).map((_, i) => {
-            const t = (i + 1) / 2;
-            if (t % 1 === 0) return null;
-            return (
-              <div
-                key={`sub-${t}`}
-                className="absolute bottom-0 h-1 w-px bg-zinc-100"
-                style={{ left: `${t * pixelsPerSecond}px`, transform: "translateX(-50%)" }}
-              />
-            );
-          })}
+          {/* Minor ticks (every 5 frames) */}
+          {minorTickFrames.map((frame) => (
+            <RulerTick
+              key={`minor-${frame}`}
+              frame={frame}
+              fps={fps}
+              pixelsPerFrame={pixelsPerFrame}
+            />
+          ))}
+
+          {/* Sub-ticks (half seconds) */}
+          {subTickFrames.map((frame) => (
+            <SubTick key={`sub-${frame}`} frame={frame} pixelsPerFrame={pixelsPerFrame} />
+          ))}
         </div>
 
         {/* Layers Container */}
         <div className="relative flex-1 overflow-y-auto bg-zinc-50/30">{children}</div>
 
         {/* Playhead */}
-        <div
-          className="pointer-events-none absolute top-0 bottom-0 z-50 w-px bg-red-500"
-          style={{ left: `${currentTimeInSeconds * pixelsPerSecond}px` }}
-        >
-          {/* Playhead Handle */}
-          <div
-            className="pointer-events-auto absolute -top-px left-1/2 h-4 w-3 -translate-x-1/2 cursor-ew-resize bg-red-500"
-            style={{ clipPath: "polygon(0% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 75%)" }}
-            onMouseDown={handleMouseDown}
-          />
-        </div>
+        <Playhead
+          currentFrame={currentFrame}
+          pixelsPerFrame={pixelsPerFrame}
+          onMouseDown={handleMouseDown}
+        />
       </div>
     </div>
   );
 });
+
+TimelineRuler.displayName = "TimelineRuler";
 
 export default TimelineRuler;
